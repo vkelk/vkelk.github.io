@@ -1,22 +1,21 @@
 # --- Basic options --- #
 
 # Name of website
-title: My website
+title: My digital journeys
 
 # Short description of your site
-description: A virtual proof that I'm awesome
+description: My digital journeys
 
 # Your name to show in the footer
-author: Some Person
+author: Vasko Kelkocev
 
 # --- List of links in the navigation bar --- #
 
 navbar-links:
   About Me: "aboutme"
   Resources:
-    - Beautiful Jekyll: "https://beautifuljekyll.com"
-    - Learn markdown: "https://www.markdowntutorial.com/"
-  Author's home: "https://deanattali.com"
+    - Vasko's Tech blog: "https://vkelk.wordpress.com"
+  Author's home: "https://vkelk.github.io"
 
 # --- Logo --- #
 
@@ -38,21 +37,21 @@ round-avatar: true
 # Uncomment the links you want to show and add your information to each one.
 # If you don't want to show a link to an RSS feed, set rss to "false".
 social-network-links:
-  email: "someone@example.com"
-  facebook: deanattali
-  github: daattali
-  twitter: daattali
+  email: "pisimina+vkelk-github-io@gmail.com"
+  # facebook: somename
+  github: vkelk
+  twitter: vkelk
   rss: true
 #  reddit: yourname
-#  linkedin: daattali
+#  linkedin: somename
 #  xing: yourname
-#  stackoverflow: "3943160/daattali"
-#  snapchat: deanat78
-#  instagram: deanat78
-#  youtube: user/deanat78
+#  stackoverflow: "3943160/somename"
+#  snapchat: somename
+#  instagram: somename
+#  youtube: user/somename
 #  spotify: yourname
-#  telephone: +14159998888
-#  steam: deanat78
+#  telephone: +somename
+#  steam: somename
 #  twitch: yourname
 #  yelp: yourname
 #  telegram: yourname
@@ -68,7 +67,7 @@ share-links-active:
 
 # How to display the link to your website in the footer
 # Remove this if you don't want a link in the footer
-url-pretty: "MyWebsite.com"
+# url-pretty: "MyWebsite.com"
 
 # Create a "tags" index page and make tags on each post clickable
 link-tags: true
@@ -164,7 +163,7 @@ date_format: "%B %-d, %Y"
 # --- You don't need to touch anything below here (but you can if you want) --- #
 
 # Output options (more information on Jekyll's site)
-timezone: "America/Vancouver"
+timezone: "UTC"
 markdown: kramdown
 highlighter: rouge
 permalink: /:year-:month-:day-:title/
@@ -201,6 +200,7 @@ exclude:
   - README.md
   - screenshot.png
   - docs/
+  - Makefile
 
 plugins:
   - jekyll-paginate
