@@ -1,7 +1,6 @@
 ---
 layout: post
 title: Fix Windows 10 Error 809, L2TP/IPSec VPN
-# subtitle: Excerpt from Soulshaping by Jeff Brown
 cover-img: https://miro.medium.com/max/700/0*iuVrmoYNMxFRdNl6
 tags: [books, test]
 ---
