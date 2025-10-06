@@ -1,6 +1,647 @@
----
-layout: home
-title: My digital journeys
-subtitle: This is where I will tell my friends way about my digital journeys
----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Vasko Kelkocev - Platform Engineering Leader specializing in AWS cost optimization, Kubernetes at scale, and building next-gen cloud infrastructure. $1M+ in AWS savings delivered.">
+    <meta name="keywords" content="Platform Engineering, AWS Cost Optimization, Kubernetes, DevOps, Cloud Architecture, Infrastructure as Code, Terraform, ArgoCD">
+    <title>Vasko Kelkocev - Platform Engineering Leader | AWS Cost Optimization Expert</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #2563eb;
+            --secondary: #1e40af;
+            --accent: #3b82f6;
+            --text: #1f2937;
+            --text-light: #6b7280;
+            --bg: #ffffff;
+            --bg-alt: #f9fafb;
+            --border: #e5e7eb;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Header */
+        header {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        nav a {
+            margin-left: 30px;
+            text-decoration: none;
+            color: var(--text);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        nav a:hover {
+            color: var(--primary);
+        }
+        
+        /* Hero Section */
+        .hero {
+            padding: 80px 0 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+        
+        .hero .subtitle {
+            font-size: 24px;
+            margin-bottom: 15px;
+            opacity: 0.95;
+        }
+        
+        .hero .tagline {
+            font-size: 18px;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto 40px;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 14px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            font-size: 16px;
+        }
+        
+        .btn-primary {
+            background: white;
+            color: var(--primary);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: var(--primary);
+        }
+        
+        /* Stats Section */
+        .stats {
+            background: var(--bg-alt);
+            padding: 60px 0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            text-align: center;
+        }
+        
+        .stat-item {
+            padding: 20px;
+        }
+        
+        .stat-number {
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+        
+        .stat-label {
+            font-size: 16px;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+        
+        /* Section Styles */
+        section {
+            padding: 80px 0;
+        }
+        
+        .section-title {
+            font-size: 36px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 50px;
+            color: var(--text);
+        }
+        
+        .section-subtitle {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 18px;
+            margin-top: -30px;
+            margin-bottom: 50px;
+        }
+        
+        /* Expertise Section */
+        .expertise-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+        
+        .expertise-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 30px;
+            transition: all 0.3s;
+        }
+        
+        .expertise-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-color: var(--primary);
+        }
+        
+        .expertise-icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+        }
+        
+        .expertise-card h3 {
+            font-size: 22px;
+            margin-bottom: 15px;
+            color: var(--text);
+        }
+        
+        .expertise-card p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+        
+        .tech-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .tech-tag {
+            background: var(--bg-alt);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--text);
+            font-weight: 500;
+        }
+        
+        /* Articles Section */
+        .articles {
+            background: var(--bg-alt);
+        }
+        
+        .articles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+        
+        .article-card {
+            background: var(--bg);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s;
+            border: 1px solid var(--border);
+        }
+        
+        .article-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .article-content {
+            padding: 25px;
+        }
+        
+        .article-badge {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .article-card h3 {
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+        
+        .article-card p {
+            color: var(--text-light);
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        
+        .article-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .article-link:hover {
+            gap: 8px;
+        }
+        
+        /* Contact Section */
+        .contact {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .contact .section-title {
+            color: white;
+        }
+        
+        .contact-text {
+            font-size: 18px;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+        
+        .contact-methods {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+        
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+        }
+        
+        .contact-item a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .contact-item a:hover {
+            text-decoration: underline;
+        }
+        
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .social-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.2);
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .social-link:hover {
+            background: white;
+            color: var(--primary);
+            transform: translateY(-2px);
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--text);
+            color: white;
+            text-align: center;
+            padding: 30px 0;
+        }
+        
+        footer p {
+            opacity: 0.8;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 36px;
+            }
+            
+            .hero .subtitle {
+                font-size: 20px;
+            }
+            
+            .hero .tagline {
+                font-size: 16px;
+            }
+            
+            .section-title {
+                font-size: 28px;
+            }
+            
+            nav {
+                display: none;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .expertise-grid,
+            .articles-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">Vasko Kelkocev</div>
+                <nav>
+                    <a href="#expertise">Expertise</a>
+                    <a href="#articles">Articles</a>
+                    <a href="#contact">Contact</a>
+                </nav>
+            </div>
+        </div>
+    </header>
 
+    <section class="hero">
+        <div class="container">
+            <h1>Platform Engineering Leader</h1>
+            <p class="subtitle">Building Next-Generation Cloud Infrastructure</p>
+            <p class="tagline">Architecting enterprise-grade platform engineering ecosystems using Kubernetes, GitOps, and Infrastructure-as-Code at scale. Delivering $1M+ in AWS cost savings while enabling 200+ developers.</p>
+            <div class="cta-buttons">
+                <a href="#contact" class="btn btn-primary">Get In Touch</a>
+                <a href="https://medium.com/@vkelk" class="btn btn-secondary" target="_blank">Read My Articles</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="stats">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number">$1M+</div>
+                    <div class="stat-label">Annual AWS Cost Savings</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">200+</div>
+                    <div class="stat-label">Developers Enabled</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">15+</div>
+                    <div class="stat-label">Years Experience</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">50+</div>
+                    <div class="stat-label">Development Teams Supported</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">40%</div>
+                    <div class="stat-label">Faster CI/CD Pipelines</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">Multi-Million $</div>
+                    <div class="stat-label">Cloud Spend Managed</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="expertise">
+        <div class="container">
+            <h2 class="section-title">What I Do</h2>
+            <p class="section-subtitle">Building platform engineering ecosystems where developers can deploy applications seamlessly while we manage the complexity behind the scenes.</p>
+            
+            <div class="expertise-grid">
+                <div class="expertise-card">
+                    <div class="expertise-icon">🏗️</div>
+                    <h3>Platform Engineering</h3>
+                    <p>Building enterprise-grade internal developer platforms using platform-as-a-product methodology. Self-service infrastructure that enables teams to move fast without compromising reliability.</p>
+                    <div class="tech-list">
+                        <span class="tech-tag">Multi-region EKS</span>
+                        <span class="tech-tag">ArgoCD</span>
+                        <span class="tech-tag">Helm</span>
+                        <span class="tech-tag">Karpenter</span>
+                    </div>
+                </div>
+
+                <div class="expertise-card">
+                    <div class="expertise-icon">💰</div>
+                    <h3>AWS Cost Optimization</h3>
+                    <p>Strategic cloud cost optimization delivering $1M+ in annual savings. Right-sizing, autoscaling, and architectural improvements that reduce costs while improving performance.</p>
+                    <div class="tech-list">
+                        <span class="tech-tag">FinOps</span>
+                        <span class="tech-tag">Cost Analysis</span>
+                        <span class="tech-tag">Reserved Instances</span>
+                        <span class="tech-tag">Spot Instances</span>
+                    </div>
+                </div>
+
+                <div class="expertise-card">
+                    <div class="expertise-icon">🔄</div>
+                    <h3>GitOps & Infrastructure as Code</h3>
+                    <p>GitOps workflows with ArgoCD managing multi-region infrastructure. Terraform and Infrastructure-as-Code at scale across AWS environments with full automation.</p>
+                    <div class="tech-list">
+                        <span class="tech-tag">ArgoCD</span>
+                        <span class="tech-tag">Terraform</span>
+                        <span class="tech-tag">GitHub Actions</span>
+                        <span class="tech-tag">CloudFormation</span>
+                    </div>
+                </div>
+
+                <div class="expertise-card">
+                    <div class="expertise-icon">🎯</div>
+                    <h3>Kubernetes at Scale</h3>
+                    <p>Multi-tenant Kubernetes platforms serving millions of users. Advanced tooling including Istio service mesh, Karpenter autoscaling, and OpenTelemetry observability.</p>
+                    <div class="tech-list">
+                        <span class="tech-tag">EKS</span>
+                        <span class="tech-tag">Istio</span>
+                        <span class="tech-tag">Multi-tenant</span>
+                        <span class="tech-tag">Service Mesh</span>
+                    </div>
+                </div>
+
+                <div class="expertise-card">
+                    <div class="expertise-icon">🔍</div>
+                    <h3>Observability & Monitoring</h3>
+                    <p>Production-grade observability using OpenTelemetry and Datadog. Distributed tracing, custom metrics, and alerting for mission-critical healthcare applications.</p>
+                    <div class="tech-list">
+                        <span class="tech-tag">OpenTelemetry</span>
+                        <span class="tech-tag">Datadog</span>
+                        <span class="tech-tag">Prometheus</span>
+                        <span class="tech-tag">Grafana</span>
+                    </div>
+                </div>
+
+                <div class="expertise-card">
+                    <div class="expertise-icon">👥</div>
+                    <h3>Engineering Leadership</h3>
+                    <p>Leading high-performance platform engineering teams. Building developer-first cultures and mentoring engineers to grow in their careers.</p>
+                    <div class="tech-list">
+                        <span class="tech-tag">Team Building</span>
+                        <span class="tech-tag">Mentoring</span>
+                        <span class="tech-tag">Strategy</span>
+                        <span class="tech-tag">Culture</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="articles" class="articles">
+        <div class="container">
+            <h2 class="section-title">Recent Articles & Insights</h2>
+            <p class="section-subtitle">Writing about platform engineering, cloud cost optimization, and lessons learned from building infrastructure at scale.</p>
+            
+            <div class="articles-grid">
+                <div class="article-card">
+                    <div class="article-content">
+                        <span class="article-badge">Coming Soon</span>
+                        <h3>How We Saved $1M in AWS Costs While Scaling to Serve 200+ Developers</h3>
+                        <p>The complete story of strategic cloud cost optimization: specific tactics, results, and lessons learned from reducing AWS spend by over $1M annually without sacrificing performance.</p>
+                        <a href="https://medium.com/@vkelk" class="article-link">Read on Medium →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <div class="article-content">
+                        <span class="article-badge">Coming Soon</span>
+                        <h3>Building Platform-as-a-Product for 200+ Developers</h3>
+                        <p>How we architected an internal developer platform that enables self-service infrastructure while maintaining reliability, security, and cost efficiency.</p>
+                        <a href="https://medium.com/@vkelk" class="article-link">Read on Medium →</a>
+                    </div>
+                </div>
+
+                <div class="article-card">
+                    <div class="article-content">
+                        <span class="article-badge">Published</span>
+                        <h3>Kubernetes DaemonSet Deployment in Mixed OS Environments</h3>
+                        <p>Production lessons from managing multi-region EKS clusters serving hundreds of developers. Real-world solutions to complex Kubernetes challenges.</p>
+                        <a href="https://medium.com/@vkelk" class="article-link">Read on Medium →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2 class="section-title">Let's Connect</h2>
+            <p class="contact-text">Available for consulting on platform engineering architecture, AWS cost optimization, and engineering leadership.</p>
+            
+            <div class="contact-methods">
+                <div class="contact-item">
+                    <span>📧</span>
+                    <a href="mailto:pisimina@gmail.com">pisimina@gmail.com</a>
+                </div>
+                <div class="contact-item">
+                    <span>📍</span>
+                    <span>Skopje, North Macedonia</span>
+                </div>
+            </div>
+
+            <div class="social-links">
+                <a href="https://www.linkedin.com/in/vasko-k-89982319" class="social-link" target="_blank">
+                    💼 LinkedIn
+                </a>
+                <a href="https://medium.com/@vkelk" class="social-link" target="_blank">
+                    📝 Medium
+                </a>
+                <a href="https://github.com/vkelk" class="social-link" target="_blank">
+                    💻 GitHub
+                </a>
+                <a href="https://stackoverflow.com/users/2468152/vasko-k" class="social-link" target="_blank">
+                    💬 Stack Overflow
+                </a>
+            </div>
+
+            <div style="margin-top: 50px;">
+                <h3 style="margin-bottom: 20px;">Open To:</h3>
+                <div style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; font-size: 16px;">
+                    <span>🎯 Platform Engineering Consulting</span>
+                    <span>💰 AWS Cost Optimization Advisory</span>
+                    <span>🎤 Conference Speaking</span>
+                    <span>🏢 Enterprise Architecture Reviews</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Vasko Kelkocev. Platform Engineering Leader at RLDatix.</p>
+            <p style="margin-top: 10px; opacity: 0.7;">Building the infrastructure of tomorrow, today.</p>
+        </div>
+    </footer>
+</body>
+</html>
