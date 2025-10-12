@@ -1,0 +1,1008 @@
+<h1 class="graf graf--h1">Configuring Claude Code Extension with AWS Bedrock (And How You Can Avoid My Mistakes)</h1>
+<h2 class="graf graf--h2">Introduction: Why I Needed This Setup</h2>
+<p class="graf graf--p">Like many developers working in enterprise environments, I found myself in a situation where I wanted to leverage AI-assisted coding through Claude Code in VS Code, but I needed to use AWS Bedrock instead of Anthropic's direct API. The reasons were straightforward: my organization already had AWS infrastructure in place, and using Bedrock meant better compliance with our security policies, centralized billing, and integration with our existing AWS services.</p>
+<p class="graf graf--p">What I thought would be a simple configuration turned into several hours of troubleshooting. Status messages like "thinking...", "deliberating...", and "coalescing..." would appear, but no actual responses came through. Error messages about "e is not iterable" filled my developer console, and I couldn't figure out what was wrong.</p>
+<p class="graf graf--p">This guide is the documentation I wish I had when I started. It's based on my real experience, including all the mistakes I made and how I eventually got everything working.</p>
+<h2 class="graf graf--h2">What You'll Accomplish</h2>
+<p class="graf graf--p">By the end of this guide, you'll have:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Claude Code extension fully integrated with AWS Bedrock</li>
+<li class="graf graf--li">A working configuration that uses AWS inference profiles</li>
+<li class="graf graf--li">The ability to use Claude Sonnet 4.5 directly in VS Code through your AWS account</li>
+<li class="graf graf--li">A troubleshooting framework for common issues</li>
+</ul>
+<h2 class="graf graf--h2">Prerequisites</h2>
+<p class="graf graf--p">Before you begin, ensure you have:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Visual Studio Code</strong> installed (<a href="https://code.visualstudio.com/">Download here</a>)</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">AWS CLI</strong> installed and configured (<a href="https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html">Installation guide</a>)</li>
+<li class="graf graf--li">An <strong class="markup--strong markup--p-strong">AWS account</strong> with appropriate permissions (at minimum: <code class="markup--code markup--pre-code">bedrock:InvokeModel</code>, <code class="markup--code markup--pre-code">bedrock:ListFoundationModels</code>, <code class="markup--code markup--pre-code">bedrock:ListInferenceProfiles</code>)</li>
+<li class="graf graf--li">Access to <strong class="markup--strong markup--p-strong">AWS Bedrock</strong> in your chosen region</li>
+<li class="graf graf--li">The <strong class="markup--strong markup--p-strong">Claude Code extension</strong> installed in VS Code (<a href="https://marketplace.visualstudio.com/items?itemName=Anthropic.claude-code">Extension page</a>)</li>
+</ul>
+<h2 class="graf graf--h2">Quick Start Summary - TL;DR</h2>
+<p class="graf graf--p">If you're in a hurry, here's the absolute minimum to get started:</p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Enable Claude in AWS Bedrock</strong> (5 minutes)</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Console → Bedrock → Model access → Enable Claude Sonnet 4.5</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Get your inference profile ARN</strong> (2 minutes)</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws bedrock list-inference-profiles --region eu-west-2 --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Test AWS connection</strong> (5 minutes)</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">echo '{"anthropic_version":"bedrock-2023-05-31","max_tokens":100,"messages":[{"role":"user","content":"Hello"}]}' &gt; request.json
+
+aws bedrock-runtime invoke-model \
+  --model-id YOUR_INFERENCE_PROFILE_ARN \
+  --body file://request.json \
+  --region eu-west-2 \
+  --profile YOUR_AWS_PROFILE_NAME \
+  --cli-binary-format raw-in-base64-out \
+  output.txt
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Configure VS Code</strong> (3 minutes)</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+    "claude-code.selectedModel": "claude-sonnet-4-5-20250929",
+    "claude-code.environmentVariables": [
+        {"name": "AWS_PROFILE", "value": "YOUR_AWS_PROFILE_NAME"},
+        {"name": "AWS_REGION", "value": "eu-west-2"},
+        {"name": "BEDROCK_MODEL_ID", "value": "YOUR_INFERENCE_PROFILE_ARN"},
+        {"name": "CLAUDE_CODE_USE_BEDROCK", "value": "1"}
+    ]
+}
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reload VS Code and test</strong> (1 minute)</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Cmd/Ctrl+Shift+P → "Developer: Reload Window"</li>
+<li class="graf graf--li">Open Claude Code → Type "say hello"</li>
+</ul>
+</li>
+</ol>
+<p class="graf graf--p">Total time: ~15 minutes (assuming AWS account already set up)</p>
+<h2 class="graf graf--h2">Part 1: Understanding and Setting Up AWS Bedrock</h2>
+<h3 class="graf graf--h3">Why AWS Bedrock Instead of Direct API?</h3>
+<p class="graf graf--p">AWS Bedrock acts as a unified interface for foundation models, including Claude. For enterprise users, this provides:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Compliance</strong>: Keep all AI interactions within your AWS environment</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Cost Management</strong>: Centralized billing and monitoring through AWS</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Security</strong>: Leverage existing AWS IAM policies and VPC configurations</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Integration</strong>: Connect with other AWS services (CloudWatch, Lambda, etc.)</li>
+</ul>
+<h3 class="graf graf--h3">Step 1: Enable Model Access in AWS Bedrock</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What we're doing:</strong> AWS Bedrock requires explicit permission to access each foundation model. This is a one-time setup per region.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why this matters:</strong> Without this step, you'll get authentication errors even if your AWS credentials are valid.</p>
+<ol>
+<li class="graf graf--li">Log in to the <a href="https://console.aws.amazon.com/">AWS Console</a></li>
+<li class="graf graf--li">Navigate to <strong class="markup--strong markup--p-strong">AWS Bedrock</strong> service (search for "Bedrock" in the services search)</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Important:</strong> Select your desired region from the top-right dropdown (e.g., <code class="markup--code markup--pre-code">eu-west-2</code> for London, <code class="markup--code markup--pre-code">us-east-1</code> for North Virginia)</li>
+<li class="graf graf--li">In the left sidebar, click <strong class="markup--strong markup--p-strong">Model access</strong></li>
+<li class="graf graf--li">Click <strong class="markup--strong markup--p-strong">Manage model access</strong> or <strong class="markup--strong markup--p-strong">Enable specific models</strong></li>
+<li class="graf graf--li">Scroll down to find <strong class="markup--strong markup--p-strong">Anthropic</strong> section</li>
+<li class="graf graf--li">Check the box next to <strong class="markup--strong markup--p-strong">Claude Sonnet 4.5</strong> (or the specific Claude model you want to use)</li>
+<li class="graf graf--li">Click <strong class="markup--strong markup--p-strong">Request model access</strong> at the bottom</li>
+<li class="graf graf--li">Wait for the status to change from "Pending" to "Access granted" (usually instant for Anthropic models)</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Expected outcome:</strong> You should see a green checkmark and "Access granted" status next to Claude Sonnet 4.5.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html">AWS Bedrock Model Access Documentation</a></p>
+<h3 class="graf graf--h3">Step 2: Understanding Inference Profiles (This Was My First Stumbling Block)</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">My initial mistake:</strong> I tried using the direct model ID <code class="markup--code markup--pre-code">anthropic.claude-sonnet-4-5-20250929-v1:0</code> and kept getting errors about on-demand throughput not being supported.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What I learned:</strong> AWS Bedrock requires <strong class="markup--strong markup--p-strong">inference profiles</strong> for on-demand usage. An inference profile is essentially a wrapper around the model that provides additional features like cross-region routing, load balancing, and throughput management.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why inference profiles exist:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">They enable cross-region inference (if one region is busy, automatically route to another)</li>
+<li class="graf graf--li">They provide better availability and reliability</li>
+<li class="graf graf--li">They allow AWS to manage capacity more efficiently</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Two types of inference profiles:</strong></p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Option A: Pre-configured Cross-Region Profiles (Recommended)</strong></p>
+<p class="graf graf--p">AWS provides these out of the box:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">EU regions:</strong> <code class="markup--code markup--pre-code">eu.anthropic.claude-sonnet-4-5-v2:0</code></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">US regions:</strong> <code class="markup--code markup--pre-code">us.anthropic.claude-sonnet-4-5-v2:0</code></li>
+</ul>
+<p class="graf graf--p">These automatically route requests across multiple regions for better availability.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Option B: Custom Application Inference Profiles</strong></p>
+<p class="graf graf--p">You can create custom profiles with specific configurations, but for most use cases, the pre-configured ones work perfectly.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html">AWS Bedrock Inference Profiles Documentation</a></p>
+<h3 class="graf graf--h3">Step 3: Finding Your Inference Profile ARN</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What we're doing:</strong> We need to get the exact Amazon Resource Name (ARN) for our inference profile. This ARN is what Claude Code will use to connect to Bedrock.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why the full ARN:</strong> The ARN includes your account ID and region, ensuring requests go to the right place with the right permissions.</p>
+<p class="graf graf--p">Run this command (replace <code class="markup--code markup--pre-code">YOUR_AWS_PROFILE_NAME</code> with your AWS CLI profile name):</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws bedrock list-inference-profiles \
+  --region eu-west-2 \
+  --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Expected output:</strong> You'll see a JSON response with available inference profiles. Look for something like:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+  "inferenceProfileSummaries": [
+    {
+      "inferenceProfileName": "EU Anthropic Claude Sonnet 4.5",
+      "inferenceProfileArn": "arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "modelArn": "arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "status": "ACTIVE"
+    }
+  ]
+}
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Copy this ARN</strong> - you'll need it later. The format is:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">arn:aws:bedrock:REGION:ACCOUNT_ID:inference-profile/PROFILE_ID
+</code></pre>
+<h3 class="graf graf--h3">Step 4: Configure AWS Credentials</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What we're doing:</strong> Setting up AWS CLI credentials so Claude Code can authenticate with your AWS account.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why this is separate from the console:</strong> The AWS Console uses browser-based authentication, but CLI tools (like Claude Code) need programmatic access through access keys.</p>
+<p class="graf graf--p">If you haven't configured AWS CLI yet:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws configure --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+<p class="graf graf--p">You'll be prompted for:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">AWS Access Key ID:</strong> Found in AWS Console → IAM → Users → Security Credentials</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">AWS Secret Access Key:</strong> Generated when you create the access key (save it securely!)</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Default region:</strong> e.g., <code class="markup--code markup--pre-code">eu-west-2</code> (should match where you enabled model access)</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Output format:</strong> <code class="markup--code markup--pre-code">json</code> (recommended)</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Verify your configuration works:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws sts get-caller-identity --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Expected output:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+    "UserId": "AIDACKCEVSQ6C2EXAMPLE",
+    "Account": "ACCOUNT_ID",
+    "Arn": "arn:aws:iam::ACCOUNT_ID:user/YourUserName"
+}
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">If this fails:</strong> Check your credentials file:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Windows:</strong> <code class="markup--code markup--pre-code">C:\Users\USERNAME\.aws\credentials</code></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Mac/Linux:</strong> <code class="markup--code markup--pre-code">~/.aws/credentials</code></li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS CLI Configuration Guide</a></p>
+<h2 class="graf graf--h2">Part 2: Testing AWS Bedrock Connection (Before Touching VS Code)</h2>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why this step saved me hours:</strong> I initially jumped straight to configuring VS Code, which meant I was troubleshooting two things at once (AWS connection AND VS Code configuration). By testing the AWS connection separately first, I could confirm that part worked before moving on.</p>
+<h3 class="graf graf--h3">Create a Test Request File</h3>
+<p class="graf graf--p">The AWS Bedrock API expects requests in a specific JSON format that follows the Anthropic Messages API structure.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">For PowerShell (Windows):</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">'{"anthropic_version":"bedrock-2023-05-31","max_tokens":1000,"messages":[{"role":"user","content":"Say hello"}]}' | Set-Content -Path request.json -NoNewline
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">For Bash/Terminal (Mac/Linux):</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">echo '{"anthropic_version":"bedrock-2023-05-31","max_tokens":1000,"messages":[{"role":"user","content":"Say hello"}]}' &gt; request.json
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Breaking down this JSON:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><code class="markup--code markup--pre-code">anthropic_version</code>: Required by Bedrock to specify the API version</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">max_tokens</code>: Maximum response length (1000 is reasonable for testing)</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">messages</code>: Array of conversation messages (Claude's standard format)</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">role</code>: Either "user" (your input) or "assistant" (Claude's responses)</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">content</code>: The actual message text</li>
+</ul>
+<h3 class="graf graf--h3">Test the Bedrock API</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">My PowerShell experience:</strong> I initially tried inline JSON in PowerShell and kept getting "Invalid base64" errors. Turns out PowerShell handles quote escaping differently. Using a file (as shown above) solved this completely.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">For PowerShell (Windows):</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws bedrock-runtime invoke-model `
+  --model-id arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0 `
+  --body file://request.json `
+  --region eu-west-2 `
+  --profile YOUR_AWS_PROFILE_NAME `
+  --cli-binary-format raw-in-base64-out `
+  output.txt
+
+Get-Content output.txt
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">For Bash (Mac/Linux):</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws bedrock-runtime invoke-model \
+  --model-id arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0 \
+  --body file://request.json \
+  --region eu-west-2 \
+  --profile YOUR_AWS_PROFILE_NAME \
+  --cli-binary-format raw-in-base64-out \
+  output.txt
+
+cat output.txt
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Breaking down the command:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><code class="markup--code markup--pre-code">bedrock-runtime invoke-model</code>: The Bedrock API endpoint for running inference</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">--model-id</code>: Your inference profile ARN (use the full ARN you found earlier)</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">--body file://request.json</code>: Path to your request JSON file</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">--region</code>: Must match your inference profile region</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">--profile</code>: Your AWS CLI profile name</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">--cli-binary-format raw-in-base64-out</code>: Tells AWS CLI to accept raw JSON input (not base64)</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">output.txt</code>: Where to save the response</li>
+</ul>
+<h3 class="graf graf--h3">Expected Successful Response</h3>
+<p class="graf graf--p">If everything is configured correctly, <code class="markup--code markup--pre-code">output.txt</code> should contain:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+  "model": "claude-sonnet-4-5-20250929",
+  "id": "msg_bdrk_01VkZqvjyFoEp74SF26xipxW",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "Hello! How can I help you today?"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 9,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 12
+  }
+}
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What this tells us:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">The model is responding (you got actual text back!)</li>
+<li class="graf graf--li">Your AWS credentials work</li>
+<li class="graf graf--li">Your inference profile is active</li>
+<li class="graf graf--li">You're being charged tokens (check the <code class="markup--code markup--pre-code">usage</code> section)</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">If you see an error here, stop!</strong> Don't proceed to VS Code configuration until this works. See the Troubleshooting section below.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html">AWS Bedrock Runtime API Documentation</a></p>
+<h2 class="graf graf--h2">Part 3: Configuring VS Code Claude Code Extension (Where I Spent Most of My Time)</h2>
+<h3 class="graf graf--h3">Step 1: Open VS Code Settings</h3>
+<ol>
+<li class="graf graf--li">Open Visual Studio Code</li>
+<li class="graf graf--li">Press <code class="markup--code markup--pre-code">Ctrl+Shift+P</code> (Windows/Linux) or <code class="markup--code markup--pre-code">Cmd+Shift+P</code> (Mac) to open the command palette</li>
+<li class="graf graf--li">Type: <code class="markup--code markup--pre-code">Preferences: Open User Settings (JSON)</code></li>
+<li class="graf graf--li">Press Enter</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why JSON settings:</strong> The Claude Code extension uses environment variables in a specific format that's easier to configure in JSON than in the GUI settings editor.</p>
+<p class="graf graf--p">This opens your <code class="markup--code markup--pre-code">settings.json</code> file, which might already have other VS Code configurations.</p>
+<h3 class="graf graf--h3">Step 2: Add Claude Code Configuration (THE CRITICAL PART)</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">My biggest mistake:</strong> I initially configured <code class="markup--code markup--pre-code">environmentVariables</code> as a simple object like this:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">// ❌ WRONG - This caused "e is not iterable" error
+"claude-code.environmentVariables": {
+    "AWS_PROFILE": "AWS_PROFILE_NAME",
+    "AWS_REGION": "eu-west-2"
+}
+</code></pre>
+<p class="graf graf--p">This seems logical - most configuration uses key-value objects. But Claude Code expects an <strong class="markup--strong markup--p-strong">array of objects</strong> with specific <code class="markup--code markup--pre-code">name</code> and <code class="markup--code markup--pre-code">value</code> properties.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The correct configuration:</strong></p>
+<p class="graf graf--p">Add this to your <code class="markup--code markup--pre-code">settings.json</code> (or modify if these settings already exist):</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+    "claude-code.selectedModel": "claude-sonnet-4-5-20250929",
+    "claude-code.environmentVariables": [
+        {
+            "name": "AWS_PROFILE",
+            "value": "AWS_PROFILE_NAME"
+        },
+        {
+            "name": "AWS_REGION",
+            "value": "eu-west-2"
+        },
+        {
+            "name": "BEDROCK_MODEL_ID",
+            "value": "arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        },
+        {
+            "name": "CLAUDE_CODE_USE_BEDROCK",
+            "value": "1"
+        }
+    ]
+}
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Breaking down each setting:</strong></p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong"><code class="markup--code markup--pre-code">claude-code.selectedModel</code></strong>: </p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">The model identifier (without the full ARN)</li>
+<li class="graf graf--li">This tells Claude Code which model to display in the UI</li>
+<li class="graf graf--li">Use format: <code class="markup--code markup--pre-code">claude-sonnet-4-5-20250929</code></li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong"><code class="markup--code markup--pre-code">AWS_PROFILE</code></strong>:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Your AWS CLI profile name (from Step 4 in Part 1)</li>
+<li class="graf graf--li">Must match exactly what's in your <code class="markup--code markup--pre-code">~/.aws/credentials</code> file</li>
+<li class="graf graf--li">Example: <code class="markup--code markup--pre-code">AWS_PROFILE_NAME</code></li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong"><code class="markup--code markup--pre-code">AWS_REGION</code></strong>:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">The AWS region where you enabled model access</li>
+<li class="graf graf--li">Must match your inference profile ARN region</li>
+<li class="graf graf--li">Example: <code class="markup--code markup--pre-code">eu-west-2</code>, <code class="markup--code markup--pre-code">us-east-1</code>, <code class="markup--code markup--pre-code">us-west-2</code></li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong"><code class="markup--code markup--pre-code">BEDROCK_MODEL_ID</code></strong>:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">The full inference profile ARN (from Step 3 in Part 1)</li>
+<li class="graf graf--li">This is what Claude Code actually uses to call Bedrock</li>
+<li class="graf graf--li">Format: <code class="markup--code markup--pre-code">arn:aws:bedrock:REGION:ACCOUNT_ID:inference-profile/PROFILE_ID</code></li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong"><code class="markup--code markup--pre-code">CLAUDE_CODE_USE_BEDROCK</code></strong>:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Tells Claude Code to use Bedrock instead of Anthropic's direct API</li>
+<li class="graf graf--li">Must be set to <code class="markup--code markup--pre-code">"1"</code> (as a string, not a number)</li>
+</ul>
+</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Critical formatting rules:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">✅ <code class="markup--code markup--pre-code">environmentVariables</code> MUST be an array: <code class="markup--code markup--pre-code">[ ... ]</code></li>
+<li class="graf graf--li">✅ Each variable MUST be an object with <code class="markup--code markup--pre-code">name</code> and <code class="markup--code markup--pre-code">value</code> keys</li>
+<li class="graf graf--li">✅ Both <code class="markup--code markup--pre-code">name</code> and <code class="markup--code markup--pre-code">value</code> must be strings (in quotes)</li>
+<li class="graf graf--li">✅ All values should be exact matches (no extra spaces)</li>
+<li class="graf graf--li">❌ Don't use a simple key-value object</li>
+<li class="graf graf--li">❌ Don't forget the commas between array elements</li>
+</ul>
+<h3 class="graf graf--h3">Step 3: Save and Reload VS Code</h3>
+<p class="graf graf--p">After saving your <code class="markup--code markup--pre-code">settings.json</code>:</p>
+<ol>
+<li class="graf graf--li">Press <code class="markup--code markup--pre-code">Ctrl+Shift+P</code> (Windows/Linux) or <code class="markup--code markup--pre-code">Cmd+Shift+P</code> (Mac)</li>
+<li class="graf graf--li">Type: <code class="markup--code markup--pre-code">Developer: Reload Window</code></li>
+<li class="graf graf--li">Press Enter</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why reload:</strong> VS Code needs to restart the Claude Code extension to pick up the new environment variables. Simply saving the file isn't enough.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What happens during reload:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Claude Code extension reinitializes</li>
+<li class="graf graf--li">Environment variables are loaded</li>
+<li class="graf graf--li">The MCP (Model Context Protocol) server restarts</li>
+<li class="graf graf--li">New connections to Bedrock are established</li>
+</ul>
+<h3 class="graf graf--h3">Step 4: Test Claude Code</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">My experience:</strong> After fixing the environment variables format, I opened Claude Code and held my breath. When I typed "say hello" and actually got a response back (instead of endless "thinking..." messages), I knew I'd finally figured it out!</p>
+<ol>
+<li class="graf graf--li">Click the <strong class="markup--strong markup--p-strong">Claude icon</strong> in the VS Code sidebar (left side, looks like the Claude logo)</li>
+<li class="graf graf--li">A panel opens with a text input at the bottom</li>
+<li class="graf graf--li">Type a simple prompt: <code class="markup--code markup--pre-code">say hello</code></li>
+<li class="graf graf--li">Press Enter</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What you should see:</strong></p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Status messages</strong> (these are normal!):</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">"thinking..."</li>
+<li class="graf graf--li">"deliberating..."</li>
+<li class="graf graf--li">"coalescing..."</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Actual response from Claude:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">A proper text response answering your question</li>
+<li class="graf graf--li">The response appears in the chat window</li>
+<li class="graf graf--li">You can continue the conversation</li>
+</ul>
+</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Expected outcome:</strong> Claude responds naturally to your prompts, just like in the web interface.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">If you only see status messages without responses:</strong> See the Troubleshooting section below - this was my exact problem!</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.claude.com/en/docs/claude-code">Claude Code Documentation</a></p>
+<h2 class="graf graf--h2">Troubleshooting: Real Problems I Encountered (And How I Solved Them)</h2>
+<h3 class="graf graf--h3">Issue 1: "Invocation of model ID with on-demand throughput isn't supported"</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When this happened to me:</strong> Right at the beginning, when I tried using the direct model ID instead of an inference profile.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The error message:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">An error occurred (ValidationException) when calling the InvokeModel operation: 
+Invocation of model ID anthropic.claude-sonnet-4-5-20250929-v1:0 with on-demand 
+throughput isn't supported. Retry your request with the ID or ARN of an inference 
+profile that contains this model.
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Root cause:</strong> AWS Bedrock requires inference profiles for on-demand usage. You cannot use the model ID directly.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solution:</strong> </p>
+<ol>
+<li class="graf graf--li">List available inference profiles:<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws bedrock list-inference-profiles --region eu-west-2 --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+</li>
+<li class="graf graf--li">Use the full inference profile ARN:<pre class="graf graf--pre"><code class="markup--code markup--pre-code">arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+</code></pre>
+</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why this matters:</strong> Inference profiles provide better reliability and cross-region failover. AWS requires them for on-demand usage.</p>
+<h3 class="graf graf--h3">Issue 2: "Malformed input request, please reformat your input and try again"</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When this happened to me:</strong> Testing the AWS CLI with inline JSON on PowerShell.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The error message:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">An error occurred (ValidationException) when calling the InvokeModel operation: 
+Malformed input request, please reformat your input and try again.
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Root cause:</strong> PowerShell handles JSON string escaping differently than bash, causing the JSON to be malformed by the time it reaches AWS.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solution:</strong> Always use a file for the request body:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code"># Create the file properly
+'{"anthropic_version":"bedrock-2023-05-31","max_tokens":100,"messages":[{"role":"user","content":"Hello"}]}' | Set-Content -Path request.json -NoNewline
+
+# Then reference it
+aws bedrock-runtime invoke-model --body file://request.json ...
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Pro tip:</strong> The <code class="markup--code markup--pre-code">-NoNewline</code> parameter is important - it prevents PowerShell from adding an extra newline character that could cause parsing issues.</p>
+<h3 class="graf graf--h3">Issue 3: "Invalid base64" Error</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When this happened to me:</strong> Using inline JSON with PowerShell without the proper AWS CLI flag.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The error message:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">Invalid base64: "{"anthropic_version":"bedrock-2023-05-31",...}"
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Root cause:</strong> By default, AWS CLI expects the <code class="markup--code markup--pre-code">--body</code> parameter to be base64-encoded. When you provide raw JSON, it tries to decode it as base64 and fails.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solution:</strong> Add the <code class="markup--code markup--pre-code">--cli-binary-format raw-in-base64-out</code> flag:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">aws bedrock-runtime invoke-model `
+  --model-id YOUR_MODEL_ARN `
+  --body file://request.json `
+  --cli-binary-format raw-in-base64-out `
+  ...
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What this flag does:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><code class="markup--code markup--pre-code">raw-in</code>: Accept raw (non-base64) input</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">base64-out</code>: Return base64-encoded output (standard for binary data)</li>
+</ul>
+<h3 class="graf graf--h3">Issue 4: Status Messages Only - No Responses (MY BIGGEST HEADACHE)</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When this happened to me:</strong> After "successfully" configuring VS Code. Claude Code would open, I'd type a prompt, see "thinking...", "deliberating...", "coalescing...", and then... nothing. Just those status messages forever.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What I saw in Developer Console:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">ERR e is not iterable: TypeError: e is not iterable
+    at Wl (c:\Users\Vasko\.vscode\extensions\anthropic.claude-code-2.0.14\extension.js:69:3022)
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Root cause:</strong> I used the wrong format for <code class="markup--code markup--pre-code">environmentVariables</code> in <code class="markup--code markup--pre-code">settings.json</code>. I used a simple object instead of an array of objects.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">My wrong configuration:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">// ❌ THIS DOESN'T WORK
+"claude-code.environmentVariables": {
+    "AWS_PROFILE": "YOUR_AWS_PROFILE_NAME",
+    "AWS_REGION": "eu-west-2",
+    "BEDROCK_MODEL_ID": "arn:aws:bedrock:...",
+    "CLAUDE_CODE_USE_BEDROCK": "1"
+}
+// ❌ THIS DOESN'T WORK AS WELL
+"claude-code.environmentVariables": [
+    "AWS_PROFILE=YOUR_AWS_PROFILE_NAME",
+    "AWS_REGION=eu-west-2",
+    "BEDROCK_MODEL_ID=arn:aws:bedrock:...",
+    "CLAUDE_CODE_USE_BEDROCK=1"
+]
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The correct configuration:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">// ✅ THIS WORKS
+"claude-code.environmentVariables": [
+    {
+        "name": "AWS_PROFILE",
+        "value": "YOUR_AWS_PROFILE_NAME"
+    },
+    {
+        "name": "AWS_REGION",
+        "value": "eu-west-2"
+    },
+    {
+        "name": "BEDROCK_MODEL_ID",
+        "value": "arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    },
+    {
+        "name": "CLAUDE_CODE_USE_BEDROCK",
+        "value": "1"
+    }
+]
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why this format:</strong> The Claude Code extension internally iterates over the environment variables array. When it receives an object instead, JavaScript throws "e is not iterable" because you can't iterate over object keys the same way you iterate over arrays.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Debugging steps that helped me:</strong></p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Check Output Logs:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">View → Output</li>
+<li class="graf graf--li">Select "Claude Code" from dropdown</li>
+<li class="graf graf--li">Look for error messages when sending prompts</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Check Developer Console:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Help → Toggle Developer Tools</li>
+<li class="graf graf--li">Console tab shows JavaScript errors</li>
+<li class="graf graf--li">"e is not iterable" was the smoking gun</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Verify the format:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Check that <code class="markup--code markup--pre-code">environmentVariables</code> starts with <code class="markup--code markup--pre-code">[</code> not <code class="markup--code markup--pre-code">{</code></li>
+<li class="graf graf--li">Each variable should have both <code class="markup--code markup--pre-code">name</code> and <code class="markup--code markup--pre-code">value</code> keys</li>
+<li class="graf graf--li">All strings should be in quotes</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reload after changes:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Always reload VS Code window after changing settings</li>
+<li class="graf graf--li">Cmd/Ctrl + Shift + P → "Developer: Reload Window"</li>
+</ul>
+</li>
+</ol>
+<h3 class="graf graf--h3">Issue 5: Authentication Errors / Access Denied</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Symptoms:</strong> Errors like "Access Denied", "UnauthorizedException", or "Could not verify AWS credentials"</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Possible causes:</strong></p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">AWS profile doesn't exist:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code"># Check if your profile is configured
+aws configure list --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Credentials file is missing or corrupted:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Windows:</strong> Check <code class="markup--code markup--pre-code">C:\Users\USERNAME\.aws\credentials</code></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Mac/Linux:</strong> Check <code class="markup--code markup--pre-code">~/.aws/credentials</code></li>
+</ul>
+<p class="graf graf--p">Should look like:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">[YOUR_AWS_PROFILE_NAME]
+aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">IAM permissions are insufficient:</strong>
+Your AWS user needs these permissions:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><code class="markup--code markup--pre-code">bedrock:InvokeModel</code></li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">bedrock:ListFoundationModels</code></li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">bedrock:ListInferenceProfiles</code></li>
+</ul>
+<p class="graf graf--p">Check in AWS Console → IAM → Users → Your User → Permissions</p>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Profile name mismatch:</strong>
+The profile name in VS Code settings must EXACTLY match the name in <code class="markup--code markup--pre-code">~/.aws/credentials</code></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Check for typos</li>
+<li class="graf graf--li">Check for extra spaces</li>
+<li class="graf graf--li">Names are case-sensitive</li>
+</ul>
+</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Verification command:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code"># This should return your user info
+aws sts get-caller-identity --profile YOUR_AWS_PROFILE_NAME
+</code></pre>
+<h3 class="graf graf--h3">Issue 6: Region Mismatch Errors</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Symptoms:</strong> Model not found, or "requested resource is not available in this region"</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Root cause:</strong> Inconsistency between where you enabled model access and where you're trying to use it.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Three places that must match:</strong></p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">AWS Bedrock Console:</strong> Where you enabled model access</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Check: AWS Console → Bedrock → Model access</li>
+<li class="graf graf--li">Note the region in the top-right corner</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Inference Profile ARN:</strong> The region in your ARN</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">arn:aws:bedrock:eu-west-2:...
+                 ^^^^^^^^^^
+                 This region
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">VS Code Settings:</strong> The <code class="markup--code markup--pre-code">AWS_REGION</code> environment variable</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+    "name": "AWS_REGION",
+    "value": "eu-west-2"  // Must match the above
+}
+</code></pre>
+</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solution:</strong> Pick one region and use it consistently everywhere. Popular choices:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><code class="markup--code markup--pre-code">us-east-1</code> (North Virginia) - Usually cheapest, most features</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">us-west-2</code> (Oregon) - West coast US</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">eu-west-2</code> (London) - European data residency</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">ap-southeast-1</code> (Singapore) - Asia Pacific</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Pro tip:</strong> Different regions have different model availability and pricing. Check the <a href="https://aws.amazon.com/bedrock/pricing/">AWS Bedrock pricing page</a> for your region.</p>
+<h2 class="graf graf--h2">Verification Checklist</h2>
+<p class="graf graf--p">Before reaching out for support, verify each of these items:</p>
+<h3 class="graf graf--h3">AWS Bedrock Setup</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><input type="checkbox" disabled=""> Model access is enabled in AWS Bedrock console for Claude Sonnet 4.5</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> Model status shows "Access granted" (not "Pending" or "Not enabled")</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> You're using an inference profile ARN, not a direct model ID</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> The inference profile is in "ACTIVE" status</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> Your AWS region is consistent across all configurations</li>
+</ul>
+<h3 class="graf graf--h3">AWS CLI Testing</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><input type="checkbox" disabled=""> AWS CLI is installed and available in your terminal</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> <code class="markup--code markup--pre-code">aws sts get-caller-identity</code> works with your profile</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> You can successfully invoke the model using the CLI test (Part 2)</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> The CLI test returns actual JSON response with Claude's message</li>
+</ul>
+<h3 class="graf graf--h3">VS Code Configuration</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><input type="checkbox" disabled=""> Claude Code extension is installed and up to date</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> <code class="markup--code markup--pre-code">settings.json</code> uses the correct environment variables format (array of objects)</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> Each environment variable has both <code class="markup--code markup--pre-code">name</code> and <code class="markup--code markup--pre-code">value</code> keys</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> AWS profile name exactly matches your <code class="markup--code markup--pre-code">~/.aws/credentials</code> file</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> The <code class="markup--code markup--pre-code">BEDROCK_MODEL_ID</code> is the full inference profile ARN</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> <code class="markup--code markup--pre-code">CLAUDE_CODE_USE_BEDROCK</code> is set to <code class="markup--code markup--pre-code">"1"</code> (string, not number)</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> VS Code has been reloaded after making configuration changes</li>
+</ul>
+<h3 class="graf graf--h3">Debugging</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><input type="checkbox" disabled=""> Check Claude Code output logs (View → Output → "Claude Code")</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> Check Developer Console for errors (Help → Toggle Developer Tools)</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> No "e is not iterable" errors in console</li>
+<li class="graf graf--li"><input type="checkbox" disabled=""> No AWS authentication errors in logs</li>
+</ul>
+<h2 class="graf graf--h2">Advanced Configuration Options</h2>
+<h3 class="graf graf--h3">Using Different Models</h3>
+<p class="graf graf--p">To use different Claude models, update these two settings:</p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">In VS Code settings.json:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">"claude-code.selectedModel": "claude-opus-4-20250514"
+</code></pre>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">In BEDROCK_MODEL_ID environment variable:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+    "name": "BEDROCK_MODEL_ID",
+    "value": "arn:aws:bedrock:eu-west-2:ACCOUNT_ID:inference-profile/eu.anthropic.claude-opus-4-20250514-v1:0"
+}
+</code></pre>
+</li>
+</ol>
+<p class="graf graf--p">Available models:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><code class="markup--code markup--pre-code">claude-sonnet-4-5-20250929</code> - Best balance of intelligence and speed</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">claude-opus-4-20250514</code> - Most capable, slower and more expensive</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">claude-haiku-4-20250107</code> - Fastest and cheapest, good for simple tasks</li>
+</ul>
+<h3 class="graf graf--h3">Multiple AWS Profiles</h3>
+<p class="graf graf--p">If you work with multiple AWS accounts, you can create separate VS Code workspace settings:</p>
+<ol>
+<li class="graf graf--li">Open your workspace folder in VS Code</li>
+<li class="graf graf--li">Create <code class="markup--code markup--pre-code">.vscode/settings.json</code> in your project root</li>
+<li class="graf graf--li">Add Claude Code configuration specific to that project</li>
+<li class="graf graf--li">Workspace settings override user settings</li>
+</ol>
+<p class="graf graf--p">This allows different projects to use different AWS accounts or regions.</p>
+<h3 class="graf graf--h3">Environment Variables Priority</h3>
+<p class="graf graf--p">Claude Code checks for environment variables in this order:</p>
+<ol>
+<li class="graf graf--li">VS Code <code class="markup--code markup--pre-code">settings.json</code> (what we configured)</li>
+<li class="graf graf--li">System environment variables</li>
+<li class="graf graf--li"><code class="markup--code markup--pre-code">.env</code> file in workspace root</li>
+</ol>
+<p class="graf graf--p">If you prefer system-level configuration, you can set these environment variables in your OS instead of VS Code settings.</p>
+<h2 class="graf graf--h2">Additional Resources</h2>
+<h3 class="graf graf--h3">Official Documentation</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Claude Code Extension:</strong> <a href="https://docs.claude.com/en/docs/claude-code">https://docs.claude.com/en/docs/claude-code</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">AWS Bedrock User Guide:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/">https://docs.aws.amazon.com/bedrock/latest/userguide/</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">AWS Bedrock API Reference:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/APIReference/">https://docs.aws.amazon.com/bedrock/latest/APIReference/</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Anthropic Messages API:</strong> <a href="https://docs.anthropic.com/en/api/messages">https://docs.anthropic.com/en/api/messages</a></li>
+</ul>
+<h3 class="graf graf--h3">AWS Bedrock Specific</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Model Access:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html">https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Inference Profiles:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html">https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">IAM Permissions:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/security_iam_id-based-policy-examples.html">https://docs.aws.amazon.com/bedrock/latest/userguide/security_iam_id-based-policy-examples.html</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Bedrock Pricing:</strong> <a href="https://aws.amazon.com/bedrock/pricing/">https://aws.amazon.com/bedrock/pricing/</a></li>
+</ul>
+<h3 class="graf graf--h3">Getting Help</h3>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Claude Support:</strong> <a href="https://support.claude.com">https://support.claude.com</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">AWS Support:</strong> <a href="https://console.aws.amazon.com/support/">https://console.aws.amazon.com/support/</a></li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">VS Code Issues:</strong> <a href="https://github.com/microsoft/vscode/issues">https://github.com/microsoft/vscode/issues</a></li>
+</ul>
+<h2 class="graf graf--h2">Conclusion: What I Learned</h2>
+<p class="graf graf--p">After several hours of troubleshooting, here are my key takeaways:</p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Test AWS connectivity first:</strong> Don't try to debug VS Code and AWS at the same time. Get the AWS CLI working first, then move to VS Code.</p>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">The environment variables format is critical:</strong> This was my biggest stumbling block. It must be an array of objects with <code class="markup--code markup--pre-code">name</code> and <code class="markup--code markup--pre-code">value</code> properties, not a simple key-value object.</p>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Inference profiles are mandatory:</strong> You can't use direct model IDs with on-demand throughput. Always use the full inference profile ARN.</p>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Developer Console is your friend:</strong> When Claude Code isn't working, the first place to look is Help → Toggle Developer Tools. Error messages there saved me hours.</p>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Region consistency matters:</strong> Make sure your model access, inference profile, and environment variables all use the same AWS region.</p>
+</li>
+</ol>
+<p class="graf graf--p">The initial setup has a learning curve, but once configured correctly, Claude Code with AWS Bedrock provides a powerful, secure way to integrate AI-assisted coding into your development workflow.</p>
+<h2 class="graf graf--h2">Real-World Usage Tips (What I Wish I Knew Earlier)</h2>
+<h3 class="graf graf--h3">Understanding Token Usage and Costs</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">My surprise:</strong> After getting everything working, I was excited to use Claude Code extensively. Then I checked my AWS bill and realized I needed to understand token consumption better.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">How Bedrock charges:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Input tokens:</strong> Everything you send to Claude (your code, prompts, context)</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Output tokens:</strong> Everything Claude generates back</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Pricing varies by model and region</strong></li>
+</ul>
+<p class="graf graf--p">For Claude Sonnet 4.5 (as of September 2025):</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Input: $3 per million tokens</li>
+<li class="graf graf--li">Output: $15 per million tokens</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Rough token estimates:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">1 token ≈ 4 characters of English text</li>
+<li class="graf graf--li">1 token ≈ ¾ of a word</li>
+<li class="graf graf--li">100 tokens ≈ 75 words</li>
+<li class="graf graf--li">1,000 tokens ≈ 750 words (approximately 1.5-3 standard pages)</li>
+</ul>
+<p class="graf graf--p"><em class="markup--em markup--p-em">Note: AWS Bedrock pricing may include additional AWS service charges. Check the AWS Bedrock pricing page for your specific region.</em></p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Cost management tips:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Be specific with prompts:</strong> Don't send entire file contents if you only need Claude to look at specific functions</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Use workspace context wisely:</strong> Claude Code can read your entire workspace, but that uses tokens</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Monitor usage:</strong> Check CloudWatch or AWS Cost Explorer regularly</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Set budget alerts:</strong> Configure AWS Budget alerts to notify you at spending thresholds</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://aws.amazon.com/bedrock/pricing/">AWS Bedrock Pricing</a></p>
+<h3 class="graf graf--h3">Using Claude Code Effectively</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Best practices I discovered:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Start with specific files:</strong> Use "Add files to context" to limit what Claude sees</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Clear context regularly:</strong> Start new conversations for unrelated tasks</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Use the terminal integration:</strong> Claude Code can suggest terminal commands - very powerful!</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Review suggestions carefully:</strong> Always review code changes before accepting them</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Iterative refinement:</strong> Ask Claude to refine its suggestions rather than starting over</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Example workflow that works well:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">You: "Look at src/utils/parser.js and explain what it does"
+[Claude analyzes just that file]
+
+You: "Now add error handling for null inputs"
+[Claude provides specific changes]
+
+You: "Add unit tests for those error cases"
+[Claude generates tests]
+</code></pre>
+<h3 class="graf graf--h3">Workspace Setup for Better Results</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What helped me get better responses:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Good project structure:</strong> Claude works better with organized codebases</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Clear file naming:</strong> Descriptive filenames help Claude understand context</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">README files:</strong> A good README helps Claude understand your project faster</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Type definitions:</strong> If using TypeScript, Claude leverages types effectively</li>
+</ol>
+<h3 class="graf graf--h3">Security Considerations</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Important things I learned about security:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Credentials in code:</strong> Never commit AWS credentials. Claude Code reads from <code class="markup--code markup--pre-code">~/.aws/credentials</code> - keep that secure</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Sensitive data:</strong> Be careful what files you let Claude Code access. If your workspace contains secrets, API keys, or sensitive data, Claude will see them</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">IAM least privilege:</strong> Give your AWS user only the Bedrock permissions it needs:<pre class="graf graf--pre"><code class="markup--code markup--pre-code">{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel",
+                "bedrock:ListFoundationModels"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+</code></pre>
+</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">VPC endpoints:</strong> For extra security, you can configure Bedrock to use VPC endpoints (keeping traffic within AWS)</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/security-best-practices.html">AWS Bedrock Security Best Practices</a></p>
+<h3 class="graf graf--h3">Performance Optimization</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Tips for faster responses:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Use Haiku for simple tasks:</strong> Claude Haiku is much faster and cheaper for straightforward questions</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Limit context size:</strong> The more context Claude processes, the longer it takes</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Be specific:</strong> "Fix the bug in line 45" is faster than "review this entire file"</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Cross-region profiles help:</strong> They automatically route to less-busy regions</li>
+</ol>
+<h3 class="graf graf--h3">Handling Common Scenarios</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Scenario 1: Working with Large Codebases</strong></p>
+<p class="graf graf--p">Problem: Claude Code tries to read too many files, causing slow responses or token limit errors.</p>
+<p class="graf graf--p">Solution:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Use <code class="markup--code markup--pre-code">.claudeignore</code> file (similar to <code class="markup--code markup--pre-code">.gitignore</code>)</li>
+<li class="graf graf--li">Explicitly add only relevant files to context</li>
+<li class="graf graf--li">Break large refactoring tasks into smaller chunks</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Scenario 2: Inconsistent Responses</strong></p>
+<p class="graf graf--p">Problem: Sometimes Claude gives great suggestions, sometimes they're off-base.</p>
+<p class="graf graf--p">Solution:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Provide more context in your prompt</li>
+<li class="graf graf--li">Show Claude examples of your coding style</li>
+<li class="graf graf--li">Reference specific functions or patterns you want to follow</li>
+<li class="graf graf--li">Use "Please follow the pattern in [filename]" type prompts</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Scenario 3: Claude Suggests Changes to Wrong Files</strong></p>
+<p class="graf graf--p">Problem: Claude modifies files you didn't intend.</p>
+<p class="graf graf--p">Solution:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Clear context before starting new tasks</li>
+<li class="graf graf--li">Be explicit: "Only modify src/utils/helper.js"</li>
+<li class="graf graf--li">Review the file list Claude is considering before approving changes</li>
+</ul>
+<h2 class="graf graf--h2">Troubleshooting After Setup</h2>
+<h3 class="graf graf--h3">Issue 7: Slow Response Times</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When I noticed this:</strong> After a few days of usage, responses started taking 30+ seconds.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Possible causes:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Large workspace context:</strong> Claude is reading too many files</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Complex prompts:</strong> Very detailed or multi-part questions take longer</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Region congestion:</strong> Your chosen region might be under heavy load</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Token limits:</strong> Approaching context window limits causes slowdowns</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solutions:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Clear Claude's context (start a new conversation)</li>
+<li class="graf graf--li">Use more specific file selections</li>
+<li class="graf graf--li">Try a different time of day</li>
+<li class="graf graf--li">Switch to cross-region inference profile for automatic routing</li>
+<li class="graf graf--li">Use Claude Haiku for simpler tasks</li>
+</ul>
+<h3 class="graf graf--h3">Issue 8: "Context Window Exceeded" Errors</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The error:</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">Error: This request would exceed the model's context window
+</code></pre>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What this means:</strong> Claude has a maximum context window (amount of text it can process at once). For Claude Sonnet 4.5, that's 200,000 tokens (~150,000 words).</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solutions:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Reduce context:</strong> Remove files from Claude's context</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Summarize previous conversation:</strong> Start a new conversation with a summary</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Break up the task:</strong> Split large refactoring into smaller pieces</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Use selective file inclusion:</strong> Don't let Claude read your entire codebase</li>
+</ol>
+<h3 class="graf graf--h3">Issue 9: Unexpected AWS Charges</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When this happened:</strong> My first month's AWS bill was higher than expected.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Common causes:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Token-heavy tasks:</strong> Repeatedly asking Claude to analyze large files</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Leaving Claude Code open:</strong> Background processes may consume tokens</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Not clearing context:</strong> Long conversation threads accumulate token usage</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Using Opus unnecessarily:</strong> Opus is 3-5x more expensive than Sonnet</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Prevention:</strong></p>
+<ol>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Set up AWS Budget alerts:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">AWS Console → Billing → Budgets</li>
+<li class="graf graf--li">Create a budget with email notifications</li>
+<li class="graf graf--li">Example: Alert at $50, $100, $150</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Monitor in CloudWatch:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Track <code class="markup--code markup--pre-code">InvocationCount</code> and <code class="markup--code markup--pre-code">TokenUsage</code> metrics</li>
+<li class="graf graf--li">Set up custom dashboards</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Use Cost Explorer:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">AWS Console → Cost Explorer</li>
+<li class="graf graf--li">Filter by "Bedrock" service</li>
+<li class="graf graf--li">View daily/monthly trends</li>
+</ul>
+</li>
+<li class="graf graf--li"><p class="graf graf--p"><strong class="markup--strong markup--p-strong">Optimize usage:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Use Haiku for simple tasks</li>
+<li class="graf graf--li">Use Sonnet for most development work</li>
+<li class="graf graf--li">Reserve Opus for complex reasoning tasks only</li>
+</ul>
+</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Reference:</strong> <a href="https://docs.aws.amazon.com/cost-management/">AWS Cost Management</a></p>
+<h3 class="graf graf--h3">Issue 10: Extension Updates Break Configuration</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What happened:</strong> After updating Claude Code extension, my configuration stopped working.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Why:</strong> Extension updates sometimes change configuration formats or requirements.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Solution:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Check release notes:</strong> Read what changed in the update</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Verify settings format:</strong> Ensure your <code class="markup--code markup--pre-code">settings.json</code> still uses the correct format</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Check extension logs:</strong> View → Output → "Claude Code" for migration messages</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Downgrade if necessary:</strong> Extensions → Claude Code → gear icon → Install Another Version</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Pro tip:</strong> Before updating, copy your working <code class="markup--code markup--pre-code">settings.json</code> configuration somewhere safe.</p>
+<h2 class="graf graf--h2">Going Further: Advanced Integration</h2>
+<h3 class="graf graf--h3">Integrating with CI/CD</h3>
+<p class="graf graf--p">You can use AWS Bedrock programmatically in your CI/CD pipelines:</p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code"># Example GitHub Actions workflow
+name: AI Code Review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+      - name: AI Review
+        run: |
+          # Your script that calls Bedrock API
+          python ai_review.py
+</code></pre>
+<h3 class="graf graf--h3">Using with Other Tools</h3>
+<p class="graf graf--p">Claude Code works alongside other VS Code extensions:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">GitHub Copilot:</strong> Use both! They complement each other</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">ESLint/Prettier:</strong> Claude respects your linting rules</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Debugger:</strong> Ask Claude to help interpret error messages</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Git:</strong> Claude can help write commit messages and review diffs</li>
+</ul>
+<h3 class="graf graf--h3">Custom Prompts and Templates</h3>
+<p class="graf graf--p">Create reusable prompt templates for common tasks:</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Example: Code Review Template</strong></p>
+<pre class="graf graf--pre"><code class="markup--code markup--pre-code">Please review this code for:
+1. Security vulnerabilities
+2. Performance issues
+3. Best practices violations
+4. Potential bugs
+
+File: [filename]
+Focus areas: [specific concerns]
+</code></pre>
+<p class="graf graf--p">Save these in your workspace for consistent reviews.</p>
+<h3 class="graf graf--h3">Team Adoption</h3>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Tips for introducing Claude Code to your team:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Start with documentation:</strong> This guide is a starting point</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Shared AWS account:</strong> Set up a team AWS account with Bedrock access</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Cost allocation tags:</strong> Tag resources by team/project for better cost tracking</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Internal best practices:</strong> Document what works for your codebase</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Regular reviews:</strong> Check how the team is using it, optimize together</li>
+</ol>
+<h2 class="graf graf--h2">My Final Thoughts</h2>
+<p class="graf graf--p">Getting Claude Code working with AWS Bedrock took me several hours of troubleshooting, but it was absolutely worth it. The combination of:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Claude's powerful AI capabilities</li>
+<li class="graf graf--li">AWS Bedrock's enterprise security</li>
+<li class="graf graf--li">VS Code's development environment</li>
+<li class="graf graf--li">Existing AWS infrastructure</li>
+</ul>
+<p class="graf graf--p">...creates an incredibly productive development experience.</p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">The main lessons from my journey:</strong></p>
+<ol>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Don't skip the testing phase:</strong> Verify AWS connectivity before touching VS Code</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Pay attention to data structures:</strong> That array-vs-object difference cost me hours</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Read error messages carefully:</strong> "e is not iterable" was telling me exactly what was wrong</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Use the developer tools:</strong> Console logs revealed issues that weren't obvious otherwise</li>
+<li class="graf graf--li"><strong class="markup--strong markup--p-strong">Document as you go:</strong> I wish I'd taken notes during troubleshooting</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What I use Claude Code for now:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Explaining unfamiliar codebases</li>
+<li class="graf graf--li">Writing unit tests</li>
+<li class="graf graf--li">Refactoring complex functions</li>
+<li class="graf graf--li">Debugging obscure errors</li>
+<li class="graf graf--li">Generating boilerplate code</li>
+<li class="graf graf--li">Code reviews before committing</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">What I still do myself:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Architecture decisions</li>
+<li class="graf graf--li">Security-critical code</li>
+<li class="graf graf--li">Final code review and testing</li>
+<li class="graf graf--li">Anything involving business logic</li>
+</ul>
+<p class="graf graf--p">The key is finding the right balance - Claude Code is a powerful assistant, but you're still the developer making the final decisions.</p>
+<h2 class="graf graf--h2">Keeping This Configuration Working</h2>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Monthly maintenance:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Check AWS bills for unexpected usage</li>
+<li class="graf graf--li">Update Claude Code extension when new versions release</li>
+<li class="graf graf--li">Review AWS IAM permissions (remove unnecessary access)</li>
+<li class="graf graf--li">Clear old conversations in Claude Code to free up local storage</li>
+</ul>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">When things break:</strong></p>
+<ol>
+<li class="graf graf--li">Check if AWS credentials are still valid</li>
+<li class="graf graf--li">Verify model access is still enabled in Bedrock</li>
+<li class="graf graf--li">Check for Claude Code extension updates</li>
+<li class="graf graf--li">Review VS Code settings.json for changes</li>
+<li class="graf graf--li">Test AWS CLI connection first</li>
+</ol>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Staying informed:</strong></p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">Subscribe to AWS Bedrock updates</li>
+<li class="graf graf--li">Follow Claude Code release notes</li>
+<li class="graf graf--li">Join relevant developer communities</li>
+</ul>
+<h2 class="graf graf--h2">Acknowledgments</h2>
+<p class="graf graf--p">This guide was born out of frustration, trial and error, and eventual success. I hope it saves you the hours of troubleshooting I went through.</p>
+<p class="graf graf--p">Special thanks to:</p>
+<ul class="postList graf graf--ul">
+<li class="graf graf--li">The Claude Code team for building this powerful extension</li>
+<li class="graf graf--li">AWS Bedrock documentation (even though I didn't read it carefully enough at first!)</li>
+<li class="graf graf--li">The developer community for shared troubleshooting experiences</li>
+<li class="graf graf--li">My patience, which was tested but ultimately rewarded</li>
+</ul>
+<p class="graf graf--p">If this guide helped you, pay it forward - help the next developer struggling with their configuration!</p>
+<hr>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Document Version:</strong> 1.0<br><strong class="markup--strong markup--p-strong">Last Updated:</strong> October 2025<br><strong class="markup--strong markup--p-strong">Author's Setup:</strong> VS Code on Windows, AWS Bedrock in eu-west-2, Claude Code Extension 2.0.14  </p>
+<p class="graf graf--p"><strong class="markup--strong markup--p-strong">Feedback?</strong> If you find errors or have suggestions to improve this guide, I'd love to hear them. The best documentation is the documentation that helps real developers solve real problems.</p>
